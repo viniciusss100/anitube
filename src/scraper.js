@@ -7,7 +7,7 @@
 const fetch   = require('node-fetch');
 const cheerio = require('cheerio');
 
-const BASE_URL = 'https://www.anitube.news';
+const BASE_URL = 'https://www.anitube.zip';
 
 const UA = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 ' +
            '(KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36';
@@ -40,7 +40,7 @@ async function fetchHTML(url, timeout = 15000, retries = 3) {
     } catch (err) {
       if (attempt === retries) throw err;
       const wait = attempt * 1000;
-      console.warn(`[fetchHTML] Tentativa ${attempt} falhou para ${url}. Retry em ${wait}ms. Erro: ${err.message}`);
+      console.warn(`[fetchHTML] Retry ${attempt}/${retries} para ${url}`);
       await new Promise(r => setTimeout(r, wait));
     } finally {
       clearTimeout(timer);
@@ -102,6 +102,21 @@ function makeMetaPreview(id, name, poster) {
     name        : cleanTitle(name),
     poster      : poster || '',
     posterShape : 'poster',
+  };
+}
+
+function makeLatestEpisodePreview(seriesId, episodeId, name, poster) {
+  const seriesName = cleanTitle(name);
+  return {
+    id          : `anitube:${seriesId}`,
+    type        : 'series',
+    name        : seriesName,
+    description : name,
+    poster      : poster || '',
+    posterShape : 'poster',
+    behaviorHints: {
+      defaultVideoId: `anitube:${episodeId}`,
+    },
   };
 }
 
@@ -203,7 +218,8 @@ async function getHomePage() {
 /** @param {number} [_page] reservado para compatibilidade futura */
 async function getLatestEpisodes(_page) {
   const $ = await getHomePage();
-  return parseEpiItems($);
+  const episodes = parseEpiItems($);
+  return enrichLatestEpisodeMetas(episodes);
 }
 
 /** @param {number} [_page] reservado para compatibilidade futura */
@@ -236,7 +252,16 @@ async function getAnimeList(page = 1) {
     : `${BASE_URL}/lista-de-animes-online/page/${page}/`;
   const html = await fetchHTML(url);
   const $    = cheerio.load(html);
-  return parseAniItems($, $('div.aniItem'));
+  return enrichWithTmdbPosters(parseAniItems($, $('div.aniItem')));
+}
+
+async function getAnimeListDubbed(page = 1) {
+  const url  = page === 1
+    ? `${BASE_URL}/lista-de-animes-online/?genero=dublado`
+    : `${BASE_URL}/lista-de-animes-online/page/${page}/?genero=dublado`;
+  const html = await fetchHTML(url);
+  const $    = cheerio.load(html);
+  return enrichWithTmdbPosters(parseAniItems($, $('div.aniItem')));
 }
 
 async function searchAnimes(query) {
@@ -255,6 +280,36 @@ async function searchEpisodeItems(query) {
   const html = await fetchHTML(url);
   const $    = cheerio.load(html);
   return parseEpiItems($);
+}
+
+async function enrichLatestEpisodeMetas(items) {
+  const enriched = await Promise.all(items.map(async item => {
+    const episodeId = typeof item.id === 'string' ? item.id.replace('anitube:', '') : null;
+    if (!episodeId) return item;
+
+    const seriesId = await resolveSeriesIdFromEpisode(episodeId);
+    if (!seriesId) return item;
+
+    return makeLatestEpisodePreview(seriesId, episodeId, item.name, item.poster);
+  }));
+
+  const seen = new Set();
+  return enriched.filter(item => {
+    if (seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+}
+
+async function resolveSeriesIdFromEpisode(episodeId) {
+  try {
+    const html = await fetchHTML(`${BASE_URL}/${episodeId}b/`);
+    const $ = cheerio.load(html);
+    const href = $('a.listaPagAni').first().attr('href') || '';
+    return extractId(href);
+  } catch (_) {
+    return null;
+  }
 }
 
 async function getAnimeMeta(animeId) {
@@ -341,7 +396,7 @@ async function getAnimeMeta(animeId) {
 }
 
 async function getEpisodeIframes(epId) {
-  const url  = `${BASE_URL}/video/${epId}/`;
+  const url  = `${BASE_URL}/${epId}b/`;
   const html = await fetchHTML(url);
   const $    = cheerio.load(html);
   const sources = [];
@@ -354,7 +409,6 @@ async function getEpisodeIframes(epId) {
     const container = $(`div#${tabTarget}`);
     if (!container.length) return;
 
-    // Tenta iframe.metaframe primeiro, depois qualquer iframe com src http
     const iframeSrc =
       container.find('iframe.metaframe').first().attr('src') ||
       container.find('iframe[src^="http"]').first().attr('src');
@@ -367,6 +421,46 @@ async function getEpisodeIframes(epId) {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// TMDB — enriquecimento de capas
+// ───────────────────────────────────────────────────────────────────────────
+
+const TMDB_KEY      = process.env.TMDB_API_KEY || '';
+const TMDB_IMG_BASE = 'https://image.tmdb.org/t/p/w500';
+
+// Cache simples para evitar requisições repetidas ao TMDB
+const _tmdbCache = new Map();
+
+async function fetchTmdbPoster(name) {
+  if (!TMDB_KEY) return null;
+  const key = name.toLowerCase().trim();
+  if (_tmdbCache.has(key)) return _tmdbCache.get(key);
+
+  try {
+    const url = `https://api.themoviedb.org/3/search/tv?api_key=${TMDB_KEY}&query=${encodeURIComponent(key)}&language=pt-BR`;
+    const ctrl  = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 5000);
+    const res   = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const data    = await res.json();
+    const result  = (data.results || []).find(r => r.poster_path) || null;
+    const poster  = result ? `${TMDB_IMG_BASE}${result.poster_path}` : null;
+    _tmdbCache.set(key, poster);
+    return poster;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function enrichWithTmdbPosters(items) {
+  if (!TMDB_KEY) return items;
+  return Promise.all(items.map(async item => {
+    const tmdbPoster = await fetchTmdbPoster(item.name);
+    return tmdbPoster ? { ...item, poster: tmdbPoster } : item;
+  }));
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // EXPORTS
 // ───────────────────────────────────────────────────────────────────────────
 module.exports = {
@@ -374,10 +468,12 @@ module.exports = {
   getMostWatched,
   getRecentAnimes,
   getAnimeList,
+  getAnimeListDubbed,
   searchAnimes,
   searchEpisodeItems,
   getAnimeMeta,
   getEpisodeIframes,
+  enrichWithTmdbPosters,
   // utilitários exportados para testes unitários
   extractId,
   cleanTitle,
