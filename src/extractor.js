@@ -198,7 +198,9 @@ function makeGoogleVideoStream(tabName, { url, itag, quality }) {
   const cpn       = generateCpn(videoId, videoId, timestamp);
   const sep       = url.includes('?') ? '&' : '?';
   const finalUrl  = `${url}${sep}cpn=${cpn}&c=WEB_EMBEDDED_PLAYER&cver=1.20260224.08.00`;
-  const proxyUrl  = `${PUBLIC_URL}/proxy/segment?url=${encodeURIComponent(finalUrl)}&referer=${encodeURIComponent('https://youtube.googleapis.com/')}`;
+  // URL googlevideo é vinculada ao IP do servidor (VPN). Deve ser proxiada
+  // com suporte a range requests para que o ExoPlayer consiga fazer seeking em MP4.
+  const proxyUrl  = `${PUBLIC_URL}/proxy/segment?url=${encodeURIComponent(finalUrl)}&referer=${encodeURIComponent('https://www.blogger.com/')}`;
   const label     = QUALITY_LABEL[quality] || `${quality}p`;
 
   return {
@@ -219,13 +221,13 @@ async function extractFromProxyIframe(iframeSrc, episodeReferer) {
   const streams = [];
   try {
     const res = await safeFetch(iframeSrc, {
-      headers  : { ...FETCH_HEADERS, Referer: episodeReferer || 'https://www.anitube.news/' },
+      headers  : { ...FETCH_HEADERS, Referer: episodeReferer || 'https://www.anitube.zip/' },
       redirect : 'follow',
     });
     if (!res.ok) return streams;
     const html = await res.text();
 
-    // Tenta encontrar iframe do Blogger
+    // Tenta encontrar iframe do Blogger (em qualquer domínio intermediário)
     const bloggerMatch = html.match(
       /src=["'](https?:\/\/(?:www\.)?blogger\.com\/video\.g[^"']+)["']/i
     );
@@ -254,14 +256,12 @@ async function extractFromProxyIframe(iframeSrc, episodeReferer) {
       if (m3u8Match) {
         const m3u8Url = m3u8Match[1];
         // CORREÇÃO: Proxy corretamente via PUBLIC_URL
-        const proxyUrl = `${PUBLIC_URL}/proxy/m3u8?url=${encodeURIComponent(m3u8Url)}&referer=${encodeURIComponent(episodeReferer || 'https://www.anitube.news/')}`;
+        const proxyUrl = `${PUBLIC_URL}/proxy/hls.m3u8?url=${encodeURIComponent(m3u8Url)}&referer=${encodeURIComponent(episodeReferer || 'https://www.anitube.news/')}`;
         streams.push({
           url        : proxyUrl,
           name       : 'AniTube | Player 1',
           description: 'HLS Stream (Via Proxy)',
-          // CORREÇÃO: notWebReady deve ser false quando usamos proxy local
-          // pois o proxy já serve o conteúdo de forma compatível
-          behaviorHints: { notWebReady: false },
+          behaviorHints: { notWebReady: true },
         });
         break;
       }
@@ -276,7 +276,7 @@ async function extractFromProxyIframe(iframeSrc, episodeReferer) {
 
 async function extractStreams(sources, episodeUrl) {
   const streams       = [];
-  const episodeReferer = episodeUrl || 'https://www.anitube.news/';
+  const episodeReferer = episodeUrl || 'https://www.anitube.zip/';
 
   for (const source of sources) {
     const { name, iframeSrc } = source;
@@ -289,23 +289,22 @@ async function extractStreams(sources, episodeUrl) {
       const hlsUrl = extractHLSFromVideoHLS(fullIframeSrc);
       if (hlsUrl) {
         // CORREÇÃO: Usa PUBLIC_URL (configurável via .env) em vez de 127.0.0.1 fixo
-        const proxyUrl = `${PUBLIC_URL}/proxy/m3u8` +
+        const proxyUrl = `${PUBLIC_URL}/proxy/hls.m3u8` +
                          `?url=${encodeURIComponent(hlsUrl)}` +
-                         `&referer=${encodeURIComponent('https://www.anitube.news/')}`;
+                         `&referer=${encodeURIComponent('https://www.anitube.zip/')}`;
 
         streams.push({
           url        : proxyUrl,
           name       : `AniTube | ${name}`,
           description: '[FHD] HLS Stream (Via Proxy Local)',
-          // CORREÇÃO: notWebReady: false — o proxy serve conteúdo acessível localmente
-          behaviorHints: { notWebReady: false },
+          behaviorHints: { notWebReady: true },
         });
       }
       continue;
     }
 
     // ── Tipo 2: proxy AniTube → Blogger ──
-    if (fullIframeSrc.includes('anitube.news/') && !fullIframeSrc.includes('videohls.php')) {
+    if ((fullIframeSrc.includes('anitube.news/') || fullIframeSrc.includes('anitube.zip/')) && !fullIframeSrc.includes('videohls.php')) {
       const extracted = await extractFromProxyIframe(fullIframeSrc, episodeReferer);
       for (const s of extracted) {
         streams.push({ ...s, name: `AniTube | ${name}` });
