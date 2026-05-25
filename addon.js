@@ -68,6 +68,24 @@ const manifest = {
         { name: 'skip',   isRequired: false },
       ],
     },
+    {
+      id   : 'anitube_recentes',
+      type : 'anime',
+      name : '📅 AniTube – Animes Recentes',
+      extra: [{ name: 'skip', isRequired: false }],
+    },
+    {
+      id   : 'anitube_mais_vistos',
+      type : 'anime',
+      name : '🔥 AniTube – Mais Vistos',
+      extra: [{ name: 'skip', isRequired: false }],
+    },
+    {
+      id   : 'anitube_dublados',
+      type : 'anime',
+      name : '🎙️ AniTube – Dublados',
+      extra: [{ name: 'skip', isRequired: false }],
+    },
   ],
 };
 
@@ -93,6 +111,7 @@ builder.defineCatalogHandler(async ({ id, extra = {} }) => {
         case 'anitube_ultimos':     metas = await scraper.getLatestEpisodes(page); break;
         case 'anitube_mais_vistos': metas = await scraper.getMostWatched(page);    break;
         case 'anitube_recentes':    metas = await scraper.getRecentAnimes(page);   break;
+        case 'anitube_dublados':    metas = await scraper.getAnimeListDubbed(page); break;
         case 'anitube_lista':
         default:                    metas = await scraper.getAnimeList(page);      break;
       }
@@ -152,7 +171,7 @@ builder.defineStreamHandler(async ({ id, type }) => {
       const meta = await resolveImdbTitle(imdbId);
       if (meta.title && isLikelyAnimeMeta(meta)) {
         const enriched = await enrichWithKitsuAliases(meta, imdbId);
-        streams = await searchAndExtract(enriched.title, enriched.aliases, season, episode);
+        streams = await searchBothVersions(enriched.title, enriched.aliases, season, episode);
       }
 
     } else if (
@@ -178,7 +197,7 @@ builder.defineStreamHandler(async ({ id, type }) => {
 
       const { title, aliases } = await resolveKitsuTitle(externalId);
       if (title) {
-        streams = await searchAndExtract(title, aliases, season, episode);
+        streams = await searchBothVersions(title, aliases, season, episode);
       }
     }
 
@@ -249,16 +268,36 @@ async function enrichWithKitsuAliases(meta, imdbId) {
 }
 
 async function resolveKitsuTitle(externalId) {
+  // Tenta primeiro o proxy local
   try {
     const j = await fetchJson(`${KITSU_BASE_URL}/meta/anime/${externalId}.json`);
-    return {
-      title: j?.meta?.name || null,
-      aliases: Array.isArray(j?.meta?.aliases) ? j.meta.aliases : [],
-    };
-  } catch (e) {
-    console.warn(`[Kitsu] Failed to resolve ${externalId}: ${e.message}`);
-    return { title: null, aliases: [] };
+    const title = j?.meta?.name || null;
+    if (title) {
+      return { title, aliases: Array.isArray(j?.meta?.aliases) ? j.meta.aliases : [] };
+    }
+  } catch (_) {}
+
+  // Fallback: API oficial do Kitsu (apenas para kitsu:ID)
+  if (externalId.startsWith('kitsu:')) {
+    const kitsuId = externalId.replace('kitsu:', '');
+    try {
+      const r = await fetch(`https://kitsu.io/api/edge/anime/${kitsuId}`, {
+        timeout: 8000,
+        headers: { Accept: 'application/vnd.api+json' },
+      });
+      if (r.ok) {
+        const j = await r.json();
+        const attrs = j?.data?.attributes || {};
+        const title = attrs.canonicalTitle || attrs.titles?.en || attrs.titles?.en_jp || null;
+        const aliases = Object.values(attrs.titles || {}).filter(t => typeof t === 'string' && t !== title);
+        if (attrs.abbreviatedTitles) aliases.push(...attrs.abbreviatedTitles);
+        if (title) return { title, aliases };
+      }
+    } catch (_) {}
   }
+
+  console.warn(`[Kitsu] Failed to resolve ${externalId}`);
+  return { title: null, aliases: [] };
 }
 
 // ── Busca com verificação de relevância ───────────────────────────────────────
@@ -267,49 +306,97 @@ const SIMILARITY_THRESHOLD = 0.45;
 const EPISODE_FALLBACK_THRESHOLD = 0.35;
 
 async function searchAndExtract(title, aliases, season, episode) {
-  const queries   = buildQueries(title, aliases);
-  const allTitles = buildAllTitles(title, aliases);
+  const match = await findBestMatch(buildQueries(title, aliases), buildAllTitles(title, aliases), SIMILARITY_THRESHOLD);
+  if (!match) {
+    console.warn(`[AniTube] Sem match confiável para "${title}"`);
+    return episode ? searchEpisodeDirect(title, aliases, season, episode) : [];
+  }
+  console.log(`[AniTube] Match: "${match.name}" (score: ${match.score.toFixed(2)})`);
+  const epId   = await resolveEpisodeId(match.id.replace('anitube:', ''), season, episode);
+  if (!epId) return episode ? searchEpisodeDirect(title, aliases, season, episode) : [];
+  const streams = await extractAniTubeById(epId);
+  if (streams.length || !episode) return streams;
+  return searchEpisodeDirect(title, aliases, season, episode);
+}
 
+// Busca dub e leg em paralelo, rotula os streams e retorna ambos
+async function searchBothVersions(title, aliases, season, episode) {
+  const queries    = buildQueries(title, aliases);
+  const allTitles  = buildAllTitles(title, aliases);
+
+  // Coleta todos os candidatos de todas as queries
+  const seen = new Set();
+  const candidates = [];
+  for (const q of queries) {
+    let results;
+    try { results = await scraper.searchAnimes(q); } catch (_) { continue; }
+    for (const c of (results || [])) {
+      if (!seen.has(c.id)) { seen.add(c.id); candidates.push(c); }
+    }
+  }
+
+  // Separa dub e leg pelo melhor score de cada grupo
+  let dubMatch = null, dubScore = 0;
+  let legMatch = null, legScore = 0;
+
+  for (const c of candidates) {
+    const isDub = /\b(dub(lado)?|dublado)\b/i.test(c.name || '');
+    const isLeg = /\b(leg(endado)?|legendado)\b/i.test(c.name || '');
+    const nameForScore = (c.name || '').replace(/\s*[\(\[]?\s*(dublado|legendado|dub|leg)\s*[\)\]]?/gi, '').trim();
+    const score = allTitles.reduce((max, t) => Math.max(max, similarity(t, nameForScore)), 0);
+
+    if (isDub && score > dubScore) { dubScore = score; dubMatch = c; }
+    // Candidato sem marcação explícita conta como legendado
+    if ((isLeg || (!isDub && !isLeg)) && score > legScore) { legScore = score; legMatch = c; }
+  }
+
+  const results = [];
+
+  async function extractLabeled(match, score, label) {
+    if (!match || score < SIMILARITY_THRESHOLD) return;
+    const epId   = await resolveEpisodeId(match.id.replace('anitube:', ''), season, episode);
+    if (!epId) return;
+    const streams = await extractAniTubeById(epId);
+    for (const s of streams) {
+      results.push({ ...s, name: `${s.name} [${label}]` });
+    }
+  }
+
+  await Promise.all([
+    extractLabeled(dubMatch, dubScore, 'Dublado'),
+    extractLabeled(legMatch, legScore, 'Legendado'),
+  ]);
+
+  // Fallback: se não encontrou nada, tenta searchAndExtract normal
+  if (!results.length) return searchAndExtract(title, aliases, season, episode);
+  return results;
+}
+
+async function findBestMatch(queries, allTitles, threshold) {
   let bestMatch = null;
   let bestScore = 0;
-  let matchedQuery = '';
+  let bestIsDub = false;
 
   for (const q of queries) {
     let results;
-    try {
-      results = await scraper.searchAnimes(q);
-    } catch (_) {
-      continue;
-    }
+    try { results = await scraper.searchAnimes(q); } catch (_) { continue; }
     if (!results?.length) continue;
 
     for (const candidate of results) {
       const candidateName = candidate.name || '';
-      const score = allTitles.reduce((max, t) => Math.max(max, similarity(t, candidateName)), 0);
+      const isDub = /\b(dub(lado)?|dublado)\b/i.test(candidateName);
+      const nameForScore = candidateName.replace(/\s*[\(\[]?\s*(dublado|legendado|dub|leg)\s*[\)\]]?/gi, '').trim();
+      const score = allTitles.reduce((max, t) => Math.max(max, similarity(t, nameForScore)), 0);
 
-      if (score > bestScore) {
-        bestScore  = score;
-        bestMatch  = candidate;
-        matchedQuery = q;
+      if (score > bestScore || (score === bestScore && isDub && !bestIsDub)) {
+        bestScore = score; bestMatch = candidate; bestIsDub = isDub;
       }
     }
-
-    if (bestScore >= SIMILARITY_THRESHOLD) break;
+    if (bestScore >= threshold) break;
   }
 
-  if (!bestMatch || bestScore < SIMILARITY_THRESHOLD) {
-    console.warn(`[AniTube] Sem match confiável para "${title}" (melhor score: ${bestScore.toFixed(2)})`);
-    return episode ? searchEpisodeDirect(title, aliases, season, episode) : [];
-  }
-
-  console.log(`[AniTube] Match: "${matchedQuery}" → "${bestMatch.name}" (score: ${bestScore.toFixed(2)})`);
-
-  const animeId = bestMatch.id.replace('anitube:', '');
-  const epId    = await resolveEpisodeId(animeId, season, episode);
-  const streams = await extractAniTubeById(epId);
-
-  if (streams.length || !episode) return streams;
-  return searchEpisodeDirect(title, aliases, season, episode);
+  if (!bestMatch || bestScore < threshold) return null;
+  return { ...bestMatch, score: bestScore };
 }
 
 async function searchEpisodeDirect(title, aliases, season, episode) {
@@ -318,6 +405,7 @@ async function searchEpisodeDirect(title, aliases, season, episode) {
 
   let bestMatch = null;
   let bestScore = 0;
+  let bestIsDub = false;
   let matchedQuery = '';
 
   for (const q of queries) {
@@ -330,26 +418,22 @@ async function searchEpisodeDirect(title, aliases, season, episode) {
     if (!results?.length) continue;
 
     for (const candidate of results) {
-      const candidateTitle = scraper.cleanTitle(candidate.name || '');
-      const score = allTitles.reduce((max, t) => Math.max(max, similarity(t, candidateTitle)), 0);
+      const rawName = candidate.name || '';
+      const isDub = /\b(dub(lado)?|dublado)\b/i.test(rawName);
+      const nameForScore = scraper.cleanTitle(rawName.replace(/\s*[\(\[]?\s*(dublado|legendado|dub|leg)\s*[\)\]]?/gi, '').trim());
+      const score = allTitles.reduce((max, t) => Math.max(max, similarity(t, nameForScore)), 0);
 
-      if (looksLikeEpisodeResult(candidate.name)) {
-        const candidateEpisode = extractEpisodeFromName(candidate.name);
+      if (looksLikeEpisodeResult(rawName)) {
+        const candidateEpisode = extractEpisodeFromName(rawName);
         if (candidateEpisode !== episode) continue;
-
-        if (score > bestScore) {
-          bestScore = score;
-          bestMatch = candidate;
-          matchedQuery = q;
-        }
-        continue;
+      } else {
+        if (!isSeasonCompatible(rawName, season)) continue;
       }
 
-      if (!isSeasonCompatible(candidate.name, season)) continue;
-
-      if (score > bestScore) {
-        bestScore = score;
-        bestMatch = candidate;
+      if (score > bestScore || (score === bestScore && isDub && !bestIsDub)) {
+        bestScore    = score;
+        bestMatch    = candidate;
+        bestIsDub    = isDub;
         matchedQuery = q;
       }
     }
@@ -370,6 +454,7 @@ async function searchEpisodeDirect(title, aliases, season, episode) {
 
   const animeId = bestMatch.id.replace('anitube:', '');
   const epId = await resolveEpisodeId(animeId, season, episode);
+  if (!epId) return [];
   return extractAniTubeById(epId);
 }
 
@@ -381,10 +466,8 @@ async function resolveEpisodeId(animeId, season, episode) {
     if (!videos.length) return animeId;
 
     const ep = videos.find(v => v.season === season && v.episode === episode)
-            || videos.find(v => v.episode === episode)
-            || videos[episode - 1]
-            || videos[0];
-    return ep ? ep.id.replace('anitube:', '') : animeId;
+            || videos.find(v => v.episode === episode);
+    return ep ? ep.id.replace('anitube:', '') : null;
   } catch (_) {
     return animeId;
   }
