@@ -214,7 +214,7 @@ app.get('/proxy/segment', async (req, res) => {
 // ── Stremio Addon Roteamento ──────────────────────────────────────────────────
 app.get('/:config?/manifest.json', async (req, res) => {
   try {
-    let manifest = await addonInterface.get('manifest');
+    let manifest = addonInterface.manifest;
     manifest = JSON.parse(JSON.stringify(manifest));
     
     if (req.params.config) {
