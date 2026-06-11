@@ -36,9 +36,8 @@ const QUALITY_LABEL = {
   360 : 'SD 360p',
 };
 
-// PUBLIC_URL é lido do environment — permite acesso remoto quando configurado
-const PORT       = parseInt(process.env.PORT || '7000', 10);
-const PUBLIC_URL = (process.env.PUBLIC_URL || `http://127.0.0.1:${PORT}`).replace(/\/$/, '');
+// PUBLIC_URL is a placeholder replaced dynamically in server.js per request
+const PUBLIC_URL = '{{PUBLIC_URL}}';
 
 // ───────────────────────────────────────────────────────────────────────────
 // UTILITÁRIOS

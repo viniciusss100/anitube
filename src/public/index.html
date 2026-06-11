@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🎌 AniTube.news - Stremio Addon</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-color: #0f111a;
+      --card-bg: rgba(25, 28, 41, 0.6);
+      --accent-color: #ff3366;
+      --accent-hover: #ff1a53;
+      --text-main: #ffffff;
+      --text-muted: #a0a5b5;
+      --border-color: rgba(255, 255, 255, 0.08);
+      --input-bg: rgba(15, 17, 26, 0.8);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background-image: 
+        radial-gradient(circle at 15% 50%, rgba(255, 51, 102, 0.15), transparent 25%),
+        radial-gradient(circle at 85% 30%, rgba(51, 153, 255, 0.1), transparent 25%);
+    }
+
+    .container {
+      width: 100%;
+      max-width: 480px;
+      padding: 2rem;
+    }
+
+    .card {
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 2.5rem;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .logo {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+    }
+
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(90deg, #fff, #ff3366);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    p.subtitle {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      line-height: 1.5;
+      margin-bottom: 2rem;
+    }
+
+    .form-group {
+      text-align: left;
+      margin-bottom: 1.5rem;
+    }
+
+    label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 0.875rem 1rem;
+      background: var(--input-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      color: var(--text-main);
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    input[type="text"]:focus {
+      border-color: var(--accent-color);
+      box-shadow: 0 0 0 3px rgba(255, 51, 102, 0.2);
+    }
+
+    .btn {
+      display: inline-block;
+      width: 100%;
+      padding: 1rem;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #fff;
+      background: var(--accent-color);
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.2s, transform 0.1s;
+      margin-bottom: 0.75rem;
+    }
+
+    .btn:hover { background: var(--accent-hover); }
+    .btn:active { transform: scale(0.98); }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+    }
+    .btn-secondary:hover { background: rgba(255, 255, 255, 0.1); }
+
+    .torbox-banner {
+      background: linear-gradient(135deg, rgba(29, 185, 84, 0.1), rgba(29, 185, 84, 0.02));
+      border: 1px solid rgba(29, 185, 84, 0.3);
+      border-radius: 12px;
+      padding: 1.5rem;
+      text-align: left;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .torbox-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-weight: 700;
+      color: #1db954;
+      font-size: 1.1rem;
+    }
+
+    .torbox-text {
+      font-size: 0.85rem;
+      color: rgba(255, 255, 255, 0.85);
+      line-height: 1.5;
+    }
+
+    .torbox-highlight { color: #fff; font-weight: 600; }
+
+    .torbox-actions {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 0.25rem;
+    }
+
+    .btn-torbox {
+      flex: 1;
+      padding: 0.6rem;
+      background: #1db954;
+      color: #000;
+      text-align: center;
+      border-radius: 6px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.85rem;
+      transition: opacity 0.2s;
+      border: none;
+      cursor: pointer;
+    }
+
+    .btn-torbox:hover { opacity: 0.9; }
+
+    .btn-torbox-outline {
+      background: transparent;
+      border: 1px solid #1db954;
+      color: #1db954;
+    }
+    .btn-torbox-outline:hover { background: rgba(29, 185, 84, 0.1); }
+    
+    #notification {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #1db954;
+      color: #000;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      transform: translateY(-100px);
+      opacity: 0;
+      transition: all 0.3s ease;
+      z-index: 1000;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    
+    #notification.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="notification">Copiado!</div>
+
+  <div class="container">
+    <div class="card">
+      <div class="logo">🎌</div>
+      <h1>AniTube.news</h1>
+      <p class="subtitle">Configure seu addon do Stremio com configurações opcionais para melhorar sua experiência.</p>
+
+      <div class="form-group">
+        <label for="tmdbKey">Chave da API do TMDB (Opcional)</label>
+        <input type="text" id="tmdbKey" placeholder="ex: abc123def456...">
+      </div>
+
+      <button class="btn" id="installBtn">Instalar Addon</button>
+      <button class="btn btn-secondary" id="copyBtn">Copiar Link</button>
+    </div>
+
+    <div class="torbox-banner">
+      <div class="torbox-header">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        TorBox Premium
+      </div>
+      <p class="torbox-text">
+        <span class="torbox-highlight">Desconto na assinatura anual</span> com o cupom <span class="torbox-highlight">SIGMA30</span> pagando em cripto e ganhe 7 dias por mês assinado (bônus único).
+      </p>
+      <div class="torbox-actions">
+        <a href="https://torbox.app/subscription?referral=b08bcd10-8df2-44c9-a0ba-4d5bdb62ef96" target="_blank" class="btn-torbox">Assinar Agora</a>
+        <button class="btn-torbox btn-torbox-outline" id="copyTorboxBtn">Copiar Código</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function showNotification(msg) {
+      const notif = document.getElementById('notification');
+      notif.textContent = msg;
+      notif.classList.add('show');
+      setTimeout(() => notif.classList.remove('show'), 3000);
+    }
+
+    function getManifestUrl() {
+      const tmdbKey = document.getElementById('tmdbKey').value.trim();
+      let config = '';
+      if (tmdbKey) {
+        config = 'tmdb=' + encodeURIComponent(tmdbKey);
+      }
+      
+      const host = window.location.host;
+      const protocol = window.location.protocol;
+      
+      let url = `${protocol}//${host}/`;
+      if (config) {
+        url += `${config}/`;
+      }
+      url += 'manifest.json';
+      return url;
+    }
+
+    document.getElementById('installBtn').addEventListener('click', () => {
+      let url = getManifestUrl();
+      url = url.replace('https://', 'stremio://').replace('http://', 'stremio://');
+      window.location.href = url;
+    });
+
+    document.getElementById('copyBtn').addEventListener('click', async () => {
+      const url = getManifestUrl();
+      try {
+        await navigator.clipboard.writeText(url);
+        showNotification('Link copiado para a área de transferência!');
+      } catch (err) {
+        alert('Falha ao copiar: ' + url);
+      }
+    });
+
+    document.getElementById('copyTorboxBtn').addEventListener('click', async () => {
+      const refCode = 'b08bcd10-8df2-44c9-a0ba-4d5bdb62ef96';
+      try {
+        await navigator.clipboard.writeText(refCode);
+        showNotification('Código copiado!');
+      } catch (err) {
+        alert('Falha ao copiar: ' + refCode);
+      }
+    });
+  </script>
+</body>
+</html>

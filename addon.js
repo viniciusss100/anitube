@@ -31,14 +31,25 @@ async function fetchJson(url, headers = {}) {
 // ── Cache em memória ──────────────────────────────────────────────────────────
 const cache     = new Map();
 const CACHE_TTL = 2 * 60 * 1000; // 2 min
+const MAX_CACHE = 1000;
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of cache.entries()) {
+    if (now - v.ts > CACHE_TTL) cache.delete(k);
+  }
+}, 60000).unref();
 
 function cacheGet(key) {
   const entry = cache.get(key);
   if (!entry) return null;
   if (Date.now() - entry.ts > CACHE_TTL) { cache.delete(key); return null; }
+  cache.delete(key);
+  cache.set(key, entry);
   return entry.value;
 }
 function cacheSet(key, value) {
+  if (cache.size >= MAX_CACHE) cache.delete(cache.keys().next().value);
   cache.set(key, { value, ts: Date.now() });
 }
 
@@ -56,7 +67,7 @@ const manifest = {
 
   idPrefixes : ['anitube:', 'tt', 'kitsu', 'kitsu:', 'mal', 'mal:', 'anilist', 'anilist:', 'anidb', 'anidb:'],
 
-  behaviorHints: { configurable: false, adult: false },
+  behaviorHints: { configurable: true, configurationRequired: true, adult: false },
 
   catalogs: [
     {
