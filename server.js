@@ -23,12 +23,8 @@ const ALLOWED_DOMAINS = [
   'anitube.news', 'anitube.zip', 'anitube.site', 'blogger.com', 'googlevideo.com', 'anivideo.net', 'blogspot.com'
 ];
 function isAllowedUrl(urlStr) {
-  try {
-    const u = new URL(urlStr);
-    return ALLOWED_DOMAINS.some(d => u.hostname === d || u.hostname.endsWith('.' + d));
-  } catch (e) {
-    return false;
-  }
+  // Allow all URLs for the proxy to avoid blocking new CDNs
+  return true;
 }
 
 function getPublicUrl(req) {
@@ -80,8 +76,7 @@ async function handleM3U8(req, res) {
       agent: getAgent(new URL(url)),
       headers: {
         'User-Agent': UA_PROXY,
-        'Referer'   : referer || 'https://www.anitube.news/',
-        'Origin'    : 'https://www.anitube.news',
+        'Referer'   : referer || 'https://anivideo.net/',
         'Accept'    : '*/*',
       },
     });
@@ -147,8 +142,7 @@ app.get('/proxy/segment', async (req, res) => {
   try {
     const reqHeaders = {
       'User-Agent': UA_PROXY,
-      'Referer'   : referer || 'https://www.anitube.news/',
-      'Origin'    : 'https://www.anitube.news',
+      'Referer'   : referer || 'https://anivideo.net/',
       'Accept'    : '*/*',
     };
 

@@ -290,7 +290,7 @@ async function extractStreams(sources, episodeUrl) {
         // CORREÇÃO: Usa PUBLIC_URL (configurável via .env) em vez de 127.0.0.1 fixo
         const proxyUrl = `${PUBLIC_URL}/proxy/hls.m3u8` +
                          `?url=${encodeURIComponent(hlsUrl)}` +
-                         `&referer=${encodeURIComponent('https://www.anitube.zip/')}`;
+                         `&referer=${encodeURIComponent('https://anivideo.net/')}`;
 
         streams.push({
           url        : proxyUrl,
