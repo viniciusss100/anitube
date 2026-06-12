@@ -263,8 +263,11 @@ const handleAddonRoute = async (req, res) => {
   }
 };
 
-app.get('/:config?/:resource/:type/:id/:extra?.json', handleAddonRoute);
-app.get('/:config?/:resource/:type/:id.json', handleAddonRoute);
+app.get('/:config/:resource/:type/:id/:extra?.json', handleAddonRoute);
+app.get('/:config/:resource/:type/:id.json', handleAddonRoute);
+
+app.get('/:resource/:type/:id/:extra?.json', handleAddonRoute);
+app.get('/:resource/:type/:id.json', handleAddonRoute);
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log('');
