@@ -246,8 +246,8 @@ const handleAddonRoute = async (req, res) => {
       for (const [k, v] of extraParams) extraObj[k] = v;
     }
 
-    const args = { type, id, extra: extraObj };
-    let result = await addonInterface.get(resource, args);
+    // stremio-addon-sdk requires arguments passed individually, not as an object
+    let result = await addonInterface.get(resource, type, id, extraObj);
 
     if (result && result.streams) {
       const publicUrl = getPublicUrl(req);
