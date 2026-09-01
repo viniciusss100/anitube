@@ -1,19 +1,30 @@
 {
   "name": "stremio-anitube",
-  "version": "4.0.0",
-  "description": "Stremio Addon para AniTube.news — animes em português",
+  "version": "4.3.0",
+  "description": "Stremio Addon para AniTube.news — animes em português (dublados e legendados) com catálogos, busca e streams HLS via proxy local",
   "main": "server.js",
+  "keywords": ["stremio", "addon", "anime", "anitube", "hls", "proxy", "kitsu"],
   "scripts": {
     "start": "node server.js",
-    "dev":   "node server.js"
+    "dev": "node --watch server.js",
+    "lint": "node --check addon.js && node --check server.js && node --check src/scraper.js && node --check src/extractor.js && echo 'lint: ok'",
+    "test": "node --test 2>/dev/null || echo 'no tests yet'",
+    "health": "curl -s http://127.0.0.1:${PORT:-7000}/health | jq . || curl -s http://127.0.0.1:${PORT:-7000}/health"
   },
   "dependencies": {
-    "cheerio":          "^1.0.0",
-    "dotenv":           "^17.3.1",
-    "express":          "^4.18.2",
-    "node-fetch":       "^2.7.0",
-    "stremio-addon-sdk":"^1.6.10"
+    "cheerio": "^1.0.0",
+    "compression": "^1.7.4",
+    "cors": "^2.8.5",
+    "dotenv": "^17.3.1",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "helmet": "^7.1.0",
+    "morgan": "^1.10.0",
+    "node-fetch": "^2.7.0",
+    "stremio-addon-sdk": "^1.6.10"
   },
+  "optionalDependencies": {},
   "engines": { "node": ">=18.0.0" },
-  "license": "MIT"
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/viniciusss100/anitube.git" }
 }

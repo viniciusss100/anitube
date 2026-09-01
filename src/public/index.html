@@ -241,49 +241,79 @@
     </div>
   </div>
 
+  <div id="installLinkBox" style="margin-top:1rem;display:none;text-align:left;">
+    <label style="font-size:0.8rem;color:var(--text-muted);">Link do manifest:</label>
+    <code id="manifestLink" style="display:block;word-break:break-all;background:rgba(255,255,255,0.05);padding:0.6rem;border-radius:6px;margin-top:0.3rem;font-size:0.8rem;"></code>
+  </div>
+
   <script>
-    function showNotification(msg) {
-      const notif = document.getElementById('notification');
+    const $ = (id) => document.getElementById(id);
+
+    function showNotification(msg, isError) {
+      const notif = $('notification');
       notif.textContent = msg;
+      notif.style.background = isError ? '#ff3366' : '#1db954';
+      notif.style.color = isError ? '#fff' : '#000';
       notif.classList.add('show');
       setTimeout(() => notif.classList.remove('show'), 3000);
     }
 
+    function isValidTmdbKey(k) {
+      return !k || /^[a-f0-9]{20,40}$/i.test(k);
+    }
+
     function getManifestUrl() {
-      const tmdbKey = document.getElementById('tmdbKey').value.trim();
-      let config = '';
-      if (tmdbKey) {
-        config = 'tmdb=' + encodeURIComponent(tmdbKey);
+      const tmdbKey = $('tmdbKey').value.trim();
+      if (tmdbKey && !isValidTmdbKey(tmdbKey)) {
+        showNotification('TMDB key parece inválida (esperado 32 hex chars)', true);
       }
-      
+      let config = '';
+      if (tmdbKey) config = 'tmdb=' + encodeURIComponent(tmdbKey);
       const host = window.location.host;
       const protocol = window.location.protocol;
-      
       let url = `${protocol}//${host}/`;
-      if (config) {
-        url += `${config}/`;
-      }
+      if (config) url += `${config}/`;
       url += 'manifest.json';
       return url;
     }
 
-    document.getElementById('installBtn').addEventListener('click', () => {
-      let url = getManifestUrl();
-      url = url.replace('https://', 'stremio://').replace('http://', 'stremio://');
-      window.location.href = url;
+    function updatePreview() {
+      const url = getManifestUrl();
+      const box = $('installLinkBox');
+      const code = $('manifestLink');
+      code.textContent = url;
+      box.style.display = 'block';
+    }
+
+    $('tmdbKey').addEventListener('input', updatePreview);
+    // init
+    updatePreview();
+
+    $('installBtn').addEventListener('click', () => {
+      const url = getManifestUrl();
+      const stremioUrl = url.replace(/^https?:\/\//, 'stremio://');
+      window.location.href = stremioUrl;
+      showNotification('Abrindo Stremio...');
     });
 
-    document.getElementById('copyBtn').addEventListener('click', async () => {
+    $('copyBtn').addEventListener('click', async () => {
       const url = getManifestUrl();
       try {
         await navigator.clipboard.writeText(url);
         showNotification('Link copiado para a área de transferência!');
       } catch (err) {
-        alert('Falha ao copiar: ' + url);
+        // fallback
+        const ta = document.createElement('textarea');
+        ta.value = url;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+        showNotification('Link copiado (fallback)!');
       }
     });
 
-    document.getElementById('copyTorboxBtn').addEventListener('click', async () => {
+    $('copyTorboxBtn').addEventListener('click', async () => {
       const refCode = 'b08bcd10-8df2-44c9-a0ba-4d5bdb62ef96';
       try {
         await navigator.clipboard.writeText(refCode);
