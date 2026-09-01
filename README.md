@@ -68,6 +68,9 @@ npm start
 | `TMDB_API_KEY` |  | Chave TMDB para enriquecer posters |
 | `ANITUBE_BASES` | `anitube.zip,anitube.news` | Bases para fallback |
 | `KITSU_BASE_URL` | `kitsufortheweebs…` | Proxy Kitsu/Cinemeta |
+| `SCRAPE_PROXY` | *(vazio)* | Proxy externo (http/socks) para TODAS as requisições do scraper — contorna bloqueio de IP do provedor (ex: `http://user:pass@host:port`) |
+| `SCRAPE_CORS_PROXIES` | allorigins, corsproxy | Fallback de CORS/relay proxies usado quando o IP direto é bloqueado (403/429). `{url}` é o placeholder do alvo. Vazio desabilita |
+| `TRUST_PROXY` | `1` em produção/Render | Express `trust proxy` para o rate-limit funcionar atrás de reverse-proxy |
 | `LOG_LEVEL` | `info` | `debug`/`info`/`warn`/`error` |
 | `PROXY_ALLOWED_DOMAINS` | lista padrão | Domínios permitidos no proxy |
 | `CACHE_TTL_MS` | `120000` | TTL cache streams/catalog |
@@ -123,8 +126,10 @@ stremio-anitube/
 - **scraper.js** — retry exponencial + jitter, fallback multi-domínio, concorrência limitada (5), cache negativo TMDB, `cleanTitle` e `extractEpisodeNumber` mais estritos.
 - **extractor.js** — keepAlive agents, `extractHLSFromVideoHLS` com base64/double-decode, Blogger parser tolerante, `extractStreams` paralelizado + dedup.
 - **addon.js** — `fetchJson` com AbortController+retry, manifest corrigido (`type: series`), `behaviorHints.configurationRequired=false`, handlers com validação, similaridade com normalização NFD + jaccard+dice ponderado, `isSeasonCompatible` cobrindo `cour`.
-- **server.js** — helmet/cors/compression/morgan/rate-limit opcionais (graceful fallback), SSRF com block private IPs, `/health`, reescrita de m3u8 com `PUBLIC_URL` dinâmico, streaming com magic-byte sniffing, shutdown gracioso.
-- **frontend** — preview do manifest link, validação TMDB key, fallback clipboard.
+- **server.js** — helmet/cors/compression/morgan/rate-limit opcionais (graceful fallback), `trust proxy` configurável (fix `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR`), SSRF com block private IPs, `/health`, reescrita de m3u8 com `PUBLIC_URL` dinâmico, streaming com magic-byte sniffing, shutdown gracioso.
+- **scraper.js** — retry exponencial + jitter, fallback multi-domínio, concorrência limitada (5), cache negativo TMDB, **proxy externo obrigatório (`SCRAPE_PROXY`)** e **CORS/relay fallback automático em 403 (`SCRAPE_CORS_PROXIES`)**, `cleanTitle` e `extractEpisodeNumber` mais estritos.
+- **extractor.js** — keepAlive agents, `extractHLSFromVideoHLS` com base64/double-decode, Blogger parser tolerante, `extractStreams` paralelizado + dedup, iframes do AniTube roteados pelo fallback de proxy do scraper.
+- **frontend** — preview do manifest link integrado ao card da página, validação TMDB key, fallback clipboard.
 - **package.json** — deps de segurança e scripts lint/health.
 
 ---

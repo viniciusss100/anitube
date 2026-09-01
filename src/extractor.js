@@ -17,8 +17,11 @@ const http = require('http');
 const https = require('https');
 const config = require('./config');
 const logger = require('./logger');
+const scraper = require('./scraper');
 
 const log = logger.child('extractor');
+
+const ANITUBE_HOST_RE = /(^|\.)(anitube\.news|anitube\.zip|anitube\.site)$/i;
 
 const UA_MOBILE = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36';
 
@@ -259,12 +262,24 @@ function makeGoogleVideoStream(tabName, { url, itag, quality }) {
 async function extractFromProxyIframe(iframeSrc, episodeReferer) {
   const streams = [];
   try {
-    const res = await safeFetch(iframeSrc, {
-      headers: { ...FETCH_HEADERS, Referer: episodeReferer || config.baseUrl + '/' },
-      redirect: 'follow',
-    }, 12000, 2);
-    if (!res.ok) return streams;
-    const html = await res.text();
+    let html;
+    try {
+      const hostname = new URL(iframeSrc).hostname;
+      // Iframes hospedados no próprio AniTube usam o scraper (proxy/CORS
+      // fallback) para contornar bloqueio de IP por domínio.
+      if (ANITUBE_HOST_RE.test(hostname)) {
+        html = await scraper.fetchHTML(iframeSrc, 12000, 2);
+      } else {
+        const res = await safeFetch(iframeSrc, {
+          headers: { ...FETCH_HEADERS, Referer: episodeReferer || config.baseUrl + '/' },
+          redirect: 'follow',
+        }, 12000, 2);
+        if (!res.ok) return streams;
+        html = await res.text();
+      }
+    } catch (_) {
+      return streams;
+    }
 
     const bloggerMatch = html.match(/src=["'](https?:\/\/(?:www\.)?blogger\.com\/video\.g[^"']+)["']/i);
     if (bloggerMatch) {

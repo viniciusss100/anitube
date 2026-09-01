@@ -30,6 +30,18 @@ const FETCH_HEADERS = {
   Referer: BASE_URL + '/',
 };
 
+// Proxy externo obrigatório (SCRAPE_PROXY). Aplica em todas requisições.
+let proxyAgent = null;
+if (config.http.externalProxy) {
+  try {
+    const { HttpsProxyAgent } = require('https-proxy-agent');
+    proxyAgent = new HttpsProxyAgent(config.http.externalProxy);
+    log.info(`Scraper usando proxy externo: ${config.http.externalProxy.replace(/\/\/[^@]*(@)/, '//***$1')}`);
+  } catch (e) {
+    log.warn(`SCRAPE_PROXY definido mas https-proxy-agent indisponível: ${e.message}`);
+  }
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // HTTP
 // ───────────────────────────────────────────────────────────────────────────
@@ -41,6 +53,8 @@ function jitter(ms) {
 /**
  * Busca HTML com retry automático, backoff exponencial + jitter.
  * Tenta bases alternativas em caso de falha de rede/dns.
+ * Se o IP direto estiver bloqueado (403/429), cai para os CORS/relay proxies
+ * configurados em SCRAPE_CORS_PROXIES (contorna bloqueio por IP).
  */
 async function fetchHTML(url, timeout = config.http.scraperTimeoutMs, retries = config.http.retries) {
   // Se url usa BASE_URL, tenta todas as bases em ordem como fallback
@@ -69,7 +83,9 @@ async function fetchHTML(url, timeout = config.http.scraperTimeoutMs, retries = 
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), timeout);
       try {
-        const res = await fetch(tryUrl, { headers: FETCH_HEADERS, signal: ctrl.signal });
+        const opts = { headers: FETCH_HEADERS, signal: ctrl.signal };
+        if (proxyAgent) opts.agent = proxyAgent;
+        const res = await fetch(tryUrl, opts);
         if (!res.ok) throw new Error(`HTTP ${res.status} para ${tryUrl}`);
         return await res.text();
       } catch (err) {
@@ -85,7 +101,47 @@ async function fetchHTML(url, timeout = config.http.scraperTimeoutMs, retries = 
       }
     }
   }
+
+  // ── Fallback: CORS/relay proxy (bloqueio de IP) ──────────────────────
+  if (config.http.corsProxies.length) {
+    const viaCors = await fetchViaCorsProxies(urlsToTry, Math.min(timeout, 10000));
+    if (viaCors != null) return viaCors;
+  }
+
   throw lastErr;
+}
+
+// Tenta baixar o HTML através dos CORS proxies configurados.
+// Formato do proxy: pode usar {url} como placeholder ou simplesmente
+// concatenar a URL codificada ao final.
+async function fetchViaCorsProxies(urls, timeout) {
+  for (const proxy of config.http.corsProxies) {
+    for (const targetUrl of urls) {
+      const wrapped = proxy.includes('{url}')
+        ? proxy.replace('{url}', encodeURIComponent(targetUrl))
+        : proxy + encodeURIComponent(targetUrl);
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), timeout);
+      try {
+        const opts = { headers: FETCH_HEADERS, signal: ctrl.signal };
+        if (proxyAgent) opts.agent = proxyAgent;
+        const res = await fetch(wrapped, opts);
+        if (res.ok) {
+          const text = await res.text();
+          if (text && text.length > 500) {
+            log.info(`CORS proxy ${proxy.split('?')[0]} obteve ${targetUrl} (${res.status})`);
+            return text;
+          }
+        }
+        log.warn(`CORS proxy ${proxy.split('?')[0]} retornou ${res.status} para ${targetUrl}`);
+      } catch (err) {
+        log.warn(`CORS proxy ${proxy.split('?')[0]} falhou para ${targetUrl}: ${err.message}`);
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+  }
+  return null;
 }
 
 // ───────────────────────────────────────────────────────────────────────────

@@ -14,6 +14,22 @@ const config = {
   publicUrl: (process.env.PUBLIC_URL || '').replace(/\/$/, ''),
   tmdbApiKey: process.env.TMDB_API_KEY || '',
 
+  // Express: confia no header X-Forwarded-For/Proto quando atrás de
+  // proxy/reverse-proxy (Render, Nginx, etc.) — evita falso positivo do
+  // express-rate-limit (ERR_ERL_UNEXPECTED_X_FORWARDED_FOR).
+  // Valores aceitos: true | false | <nº de hops> | CIDR/subnet
+  trustProxy: (() => {
+    const raw = process.env.TRUST_PROXY;
+    if (raw === undefined || raw === '') {
+      return (process.env.RENDER === 'true' || process.env.VERCEL === '1' || process.env.NODE_ENV === 'production') ? 1 : false;
+    }
+    const v = raw.trim().toLowerCase();
+    if (v === 'true' || v === '1') return true;
+    if (v === 'false' || v === '0') return false;
+    if (/^\d+$/.test(v)) return parseInt(v, 10);
+    return raw.trim();
+  })(),
+
   // Bases alternativas do AniTube (fallback em ordem)
   anitubeBases: (process.env.ANITUBE_BASES || 'https://www.anitube.zip,https://www.anitube.news,https://www.anitube.site')
     .split(',')
@@ -34,6 +50,19 @@ const config = {
     scraperTimeoutMs: parseIntEnv('SCRAPER_TIMEOUT_MS', 15000),
     retries: parseIntEnv('HTTP_RETRIES', 3),
     concurrency: parseIntEnv('SCRAPER_CONCURRENCY', 5),
+
+    // Proxy externo (http/socks) usado para TODAS as requisições do scraper.
+    // Contorna bloqueio de IP do provedor (ex: 403 do Cloudflare do AniTube).
+    // Ex: http://user:pass@host:port | http://host:port
+    externalProxy: (process.env.SCRAPE_PROXY || '').trim(),
+
+    // Fallback alternativo quando o IP direto está bloqueado (403/429):
+    // lista de CORS/relay proxies públicos ou próprios. Use {url} como
+    // placeholder do alvo. Vazio desabilita o fallback.
+    corsProxies: (process.env.SCRAPE_CORS_PROXIES || 'https://api.allorigins.win/raw?url={url},https://corsproxy.io/?url={url}')
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean),
   },
 
   proxy: {

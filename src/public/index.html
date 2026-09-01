@@ -126,6 +126,33 @@
     }
     .btn-secondary:hover { background: rgba(255, 255, 255, 0.1); }
 
+    .link-box {
+      margin-top: 1.25rem;
+      text-align: left;
+    }
+
+    .link-box .link-label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+    }
+
+    .link-box .link-code {
+      display: block;
+      word-break: break-all;
+      background: var(--input-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      color: var(--accent-color);
+      padding: 0.75rem 1rem;
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+      font-size: 0.78rem;
+      line-height: 1.5;
+      user-select: all;
+    }
+
     .torbox-banner {
       background: linear-gradient(135deg, rgba(29, 185, 84, 0.1), rgba(29, 185, 84, 0.02));
       border: 1px solid rgba(29, 185, 84, 0.3);
@@ -224,6 +251,11 @@
 
       <button class="btn" id="installBtn">Instalar Addon</button>
       <button class="btn btn-secondary" id="copyBtn">Copiar Link</button>
+
+      <div id="installLinkBox" class="link-box" style="display:none;">
+        <label class="link-label" for="manifestLink">Link do Manifest:</label>
+        <code id="manifestLink" class="link-code"></code>
+      </div>
     </div>
 
     <div class="torbox-banner">
@@ -239,11 +271,6 @@
         <button class="btn-torbox btn-torbox-outline" id="copyTorboxBtn">Copiar Código</button>
       </div>
     </div>
-  </div>
-
-  <div id="installLinkBox" style="margin-top:1rem;display:none;text-align:left;">
-    <label style="font-size:0.8rem;color:var(--text-muted);">Link do manifest:</label>
-    <code id="manifestLink" style="display:block;word-break:break-all;background:rgba(255,255,255,0.05);padding:0.6rem;border-radius:6px;margin-top:0.3rem;font-size:0.8rem;"></code>
   </div>
 
   <script>

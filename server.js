@@ -18,6 +18,11 @@ const log = logger.child('server');
 const app = express();
 const PORT = config.port;
 
+// Atrás de reverse-proxy (Render etc.): express-rate-limit precisa do
+// 'trust proxy' para ler X-Forwarded-For sem lançar
+// ERR_ERL_UNEXPECTED_X_FORWARDED_FOR. Configurável via TRUST_PROXY.
+if (config.trustProxy) app.set('trust proxy', config.trustProxy);
+
 let helmet, cors, morgan, compression, rateLimit;
 try { helmet = require('helmet'); } catch (_) { helmet = null; }
 try { cors = require('cors'); } catch (_) { cors = null; }
